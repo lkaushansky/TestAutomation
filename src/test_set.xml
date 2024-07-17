@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<test_set name="test set 1" project_dir="C:\Users\lkaushansky\Projects\test_automation">
+    <testcase name="POC for automation">
+        <model>auto_poc1</model>
+    </testcase>
+    <testcase name="Expected Condition tests">
+        <model>auto_poc2</model>
+        <jiratestcase>QM-1501</jiratestcase>
+    </testcase>
+</test_set>
