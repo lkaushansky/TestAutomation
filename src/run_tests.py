@@ -5,31 +5,61 @@ import glob
 import xml.etree.ElementTree as ET
 import sqlite3
 from tabulate import tabulate
+from datetime import datetime
 
+
+# *********************** START FUNCTIONS ***********************
 # function that prints error message to stdout and returns it
 def print_return_error(msg):
     print("ERROR: " + msg)
     return msg + "<br>"
 
+
+def dump_log(rep_file, log_data):
+    fh = open(rep_file, "w")
+    fh.write(log_data)
+    fh.close()
+
+
+# ***************************** END FUNCTIONS ********************
+
 # load global config
 tree = ET.parse('global_test_config.xml')
 root = tree.getroot()
 qmtExe = root.find('QMT_Editor_location').text
+if qmtExe == "" or not os.path.exists(qmtExe):
+    print("ERROR: could not locate QMT Editor file at:" + qmtExe)
+    exit(1)
 
-## load test cases
-tree = ET.parse(sys.argv[1])
+# load test cases
+testFile = "test_set.xml"
+if sys.argv[1] != "" and os.path.exists(sys.argv[1]):
+    testfile = sys.argv[1]
+else:
+    print("ERROR: could not locate test set file:" + sys.argv[1])
+    exit(1)
+tree = ET.parse(testFile)
 root = tree.getroot()
 qmtProjDir = root.get('project_dir')
 qmtRepPath = qmtProjDir + "\\reports"
 
+# read report header
+hdr_file = open("report_header.html", "r")
+header = hdr_file.read()
+hdr_file.close()
+
+# defile column headers
+col_names = ["Test case name", "JIRA Reference", "Result", "Duration", "Verification Details"]
 logData: list = []
+globStartTime = datetime.now()
 
 # loop through testcases
 for testcase in root.findall("testcase"):
 
     # start logging data
+    testStartTime = datetime.now()
     logLineData: list = [testcase.get("name")]
-    jiraRef = testcase.find("jiratestcase")
+    jiraRef = testcase.find("jiraTestCase")
     if jiraRef is not None:
         logLineData.append(
             '<a href="https://emtgrp2023.atlassian.net/browse/' + jiraRef.text + '">' + jiraRef.text + "</a>")
@@ -38,7 +68,8 @@ for testcase in root.findall("testcase"):
 
     # get model from  the test case config
     if testcase.find("model") is None:
-        logLineData.append("ERROR")
+        logLineData.append('<p style="color:yellow;font-weight:bold">ERROR</p>')
+        logLineData.append("--")
         logLineData.append(print_return_error("Could not find model name in the test case configuration for test case "
                                               + testcase.get("name")))
         logData.append(logLineData)
@@ -50,7 +81,8 @@ for testcase in root.findall("testcase"):
     files = glob.glob(qmtProjDir + "\\database\\" + model + "*.db")
     if len(files) == 0:
         print("ERROR: Could not locate db matching the model " + model + " in folder " + qmtProjDir + "\\database")
-        logLineData.append("ERROR")
+        logLineData.append('<p style="color:yellow;font-weight:bold">ERROR</p>')
+        logLineData.append("--")
         logLineData.append(print_return_error("Could not locate db matching the model " + model + " in folder " +
                                               qmtProjDir + "\\database"))
         logData.append(logLineData)
@@ -65,14 +97,14 @@ for testcase in root.findall("testcase"):
     res = cur.execute(sql)
     for row in res:
         if len(dbrows) < row[0]:
-            dbrows.append([]);
+            dbrows.append([])
         dbrows[row[0] - 1].append([row[0], row[1], row[2]])
     dbcon.close()
 
     # running the command
     cmdLine = qmtExe + " --cli --project-dir " + qmtProjDir + " --db-path " + qmtDBPath
     # ###DEBUG#### print(cmdLine)
-    # subprocess.run(cmdLine)
+    subprocess.run(cmdLine)
 
     # find latest XML report file for parsing
     files = os.listdir(qmtRepPath)
@@ -80,7 +112,8 @@ for testcase in root.findall("testcase"):
     latestReport = max(paths, key=os.path.getctime)
     # print("Latest report folder is " +latestReport)
     if model not in latestReport:
-        logLineData.append("ERROR")
+        logLineData.append('<p style="color:yellow;font-weight:bold">ERROR</p>')
+        logLineData.append("--")
         logLineData.append(print_return_error("Could not locate the latest report matching the model name " + model))
         logData.append(logLineData)
         continue
@@ -91,6 +124,7 @@ for testcase in root.findall("testcase"):
     tree = ET.parse(files[0])
     root = tree.getroot()
     testCnt = 0
+    stepCnt = 0
     errorCnt = 0
     errorText = ""
 
@@ -99,7 +133,8 @@ for testcase in root.findall("testcase"):
         testCnt += 1
         test_id = int(test.get('id'))
         if test_id != testCnt:
-            errorText += print_return_error("test id in the report does not match the sequential test numbering:" + str(test_id))
+            errorText += print_return_error(
+                "test id in the report does not match the sequential test numbering:" + str(test_id))
         print("Verifying test " + str(test_id))
 
         # get stats
@@ -108,55 +143,48 @@ for testcase in root.findall("testcase"):
         if test_status != "PASS":
             errorText += print_return_error("status for Test " + str(test_id) + " is not PASS")
         passed_steps = int(stats.get("pass"))
-        if passed_steps != len(dbrows[test_id-1]):
+        if passed_steps != len(dbrows[test_id - 1]):
             errorText += print_return_error("not all steps passed for Test " + str(test_id))
-        if test_id != int(dbrows[test_id-1][0][0]):
+        if test_id != int(dbrows[test_id - 1][0][0]):
             errorText += print_return_error(
-                "mismatch between Test id from DB and from XML:"+dbrows[test_id-1][0][0]+" <> "+test_id)
-        ####DEBUG#### print("Test status is " + test_status)
-        ####DEBUG#### print("Test has " + str(passed_steps) + " passed teststeps")
+                "mismatch between Test id from DB and from XML:" + dbrows[test_id - 1][0][0] + " <> " + test_id)
+
 
         # go through steps
-        stepcnt = 0
-        for teststep in test.findall("test_step"):
-            step_id = int(teststep.get('id'))
+        for testStep in test.findall("test_step"):
+            stepCnt += 1
+            step_id = int(testStep.get('id'))
             # print("\tVerifying step " + str(step_id))
-            node_type = teststep.get('node_type')
-            step_status = teststep.find("status").get("status")
+            node_type = testStep.get('node_type')
+            step_status = testStep.find("status").get("status")
             # ###DEBUG#### print("Step " + str(step_id) + " Node=" +node_type + " status=" + step_status )
             # ###DEBUG#### print("From DB:" + dbrows[test_id-1][step_id-1][2])
-            if step_id != int(dbrows[test_id-1][step_id-1][1]):
+            if step_id != int(dbrows[test_id - 1][step_id - 1][1]):
                 errorCnt += 1
                 errorText += print_return_error(
-                    "mismatch between step id from DB and XML:" + dbrows[test_id-1][step_id-1][1] + "<>" + str(step_id))
-            if node_type != dbrows[test_id-1][step_id-1][2]:
+                    "mismatch between step id from DB and XML:" + dbrows[test_id - 1][step_id - 1][1] + "<>" + str(
+                        step_id))
+            if node_type != dbrows[test_id - 1][step_id - 1][2]:
                 errorCnt += 1
                 errorText += print_return_error("mismatch between node types from DB and XML:" + node_type + "<>" +
-                      dbrows[test_id - 1][step_id - 1][2])
+                                                dbrows[test_id - 1][step_id - 1][2])
             if step_status != "PASS":
                 errorCnt += 1
                 errorText += print_return_error("status is not pass for step " + str(step_id))
 
-
-    if errorCnt > 0 :
-        logLineData.append("FAIL")
+    # determine if pass or fail
+    duration = int((datetime.now()-testStartTime).total_seconds())
+    if errorCnt > 0:
+        logLineData.append('<p style="color:red;font-weight:bold">FAIL</p>')
+        logLineData.append(str(duration) + " sec")
         logLineData.append(errorText)
-    else :
-        logLineData.append("PASS")
-        logLineData.append(str(testCnt) + " tests passed")
+    else:
+        logLineData.append('<p style="color:green;font-weight:bold">PASS</p>')
+        logLineData.append(str(duration) + " sec")
+        logLineData.append(str(testCnt) + " tests with " + str(stepCnt) + " steps in total passed")
     logData.append(logLineData)
 
-# finalize output
-auto_report = "<html><head><title>Test Automation Execution Report</title></head><body>"
-auto_report += tabulate(logData,headers=["Test case name","JIRA Reference","Result",'Explanation'],tablefmt='unsafehtml')
-auto_report += "</body></html>"
-print(auto_report)
-
-# write file
-f=open("c:\\test\\test_report.html","w")
-f.write(auto_report)
-f.close()
-
-
-
+    # dump partial report file in case of failure
+    auto_report = header + tabulate(logData, headers=col_names, tablefmt='unsafehtml') + "</body></html>"
+    dump_log("c:\\test\\test_report.html", auto_report)
 
