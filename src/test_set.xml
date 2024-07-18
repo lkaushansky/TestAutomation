@@ -5,6 +5,9 @@
     </testcase>
     <testcase name="Expected Condition tests">
         <model>auto_poc2</model>
-        <jiratestcase>QM-1501</jiratestcase>
+        <jiraTestCase>QM-1501</jiraTestCase>
+    </testcase>
+    <testcase name="Compare Text negative">
+        <model>auto_poc3</model>
     </testcase>
 </test_set>
