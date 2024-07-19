@@ -1,0 +1,41 @@
+<?xml version="1.0" ?>
+<test_set name="test set 1" project_dir=".\automation_tests">
+    <testgroup name="Condition nodes">
+        <testcase name="Expected Condition node using strings and /i and /n references">
+            <model>expected_condition_i_n_ref</model>
+            <jiraTestCase>QM-1501</jiraTestCase>
+        </testcase>
+        <testcase name="Expected Condition node using strings and /n references">
+            <model>expected_condition_n_ref</model>
+            <jiraTestCase>QM-1498</jiraTestCase>
+        </testcase>
+        <testcase name="Expected Condition node using strings and /i references">
+            <model>expected_condition_i_ref</model>
+            <jiraTestCase>QM-1497</jiraTestCase>
+        </testcase>
+        <testcase name="Expected Condition node using escape sequence">
+            <model>expected_condition_with_escape_sequence</model>
+            <jiraTestCase>QM-1612</jiraTestCase>
+        </testcase>
+        <testcase name="Expected Result node using Boolean value as output">
+            <model>expected_result_as_boolean</model>
+            <jiraTestCase>QM-1590</jiraTestCase>
+        </testcase>
+        <testcase name="Expected Result node using escape sequence">
+            <model>expected_result_with_escape_sequence</model>
+            <jiraTestCase>QM-1613</jiraTestCase>
+        </testcase>
+        <testcase name="Expected Result node with /n references">
+            <model>expected_result_n_ref</model>
+            <jiraTestCase>QM-1588</jiraTestCase>
+        </testcase>
+        <testcase name="Expected Result node with /i references">
+            <model>expected_result_i_ref</model>
+            <jiraTestCase>QM-1576</jiraTestCase>
+        </testcase>
+        <testcase name="Expected Result node with /i and /n references">
+            <model>expected_result_i_n_ref</model>
+            <jiraTestCase>QM-1589</jiraTestCase>
+        </testcase>
+    </testgroup>
+</test_set>
