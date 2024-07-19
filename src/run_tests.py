@@ -33,11 +33,14 @@ if qmtExe == "" or not os.path.exists(qmtExe):
 
 # load test cases
 testFile = "test_set.xml"
-if sys.argv[1] != "" and os.path.exists(sys.argv[1]):
-    testfile = sys.argv[1]
+if sys.argv[1] != "":
+    if os.path.exists(sys.argv[1]):
+        testFile = sys.argv[1]
+    else:
+        print("ERROR: could not locate test set file:" + sys.argv[1])
+        exit(1)
 else:
-    print("ERROR: could not locate test set file:" + sys.argv[1])
-    exit(1)
+    print("No test set file specified. Using default "+testFile)
 tree = ET.parse(testFile)
 root = tree.getroot()
 qmtProjDir = root.get('project_dir')
@@ -52,12 +55,15 @@ hdr_file.close()
 col_names = ["Test case name", "JIRA Reference", "Result", "Duration", "Verification Details"]
 logData: list = []
 globStartTime = datetime.now()
+header += '<h2 style="text-align:left">Test Execution start time: '+globStartTime.strftime("%b %d, %Y %H:%M:%S")+"</h2><br>"
 
 # loop through testcases
-for testcase in root.findall("testcase"):
+testCaseCount = 0
+for testcase in root.findall("*/testcase"):
 
     # start logging data
     testStartTime = datetime.now()
+    testCaseCount += 1
     logLineData: list = [testcase.get("name")]
     jiraRef = testcase.find("jiraTestCase")
     if jiraRef is not None:
@@ -80,7 +86,6 @@ for testcase in root.findall("testcase"):
     # qmtDBPath = qmtProjDir + "\\database\\" + model + "_1.db"
     files = glob.glob(qmtProjDir + "\\database\\" + model + "*.db")
     if len(files) == 0:
-        print("ERROR: Could not locate db matching the model " + model + " in folder " + qmtProjDir + "\\database")
         logLineData.append('<p style="color:yellow;font-weight:bold">ERROR</p>')
         logLineData.append("--")
         logLineData.append(print_return_error("Could not locate db matching the model " + model + " in folder " +
@@ -102,8 +107,8 @@ for testcase in root.findall("testcase"):
     dbcon.close()
 
     # running the command
-    cmdLine = qmtExe + " --cli --project-dir " + qmtProjDir + " --db-path " + qmtDBPath
-    # ###DEBUG#### print(cmdLine)
+    # cmdLine = qmtExe + " --cli --project-dir " + qmtProjDir + " --db-path " + qmtDBPath
+    cmdLine = qmtExe + " --cli --project-dir " + qmtProjDir + " --db-path " + qmtDBPath + " --headless HEADLESS"
     subprocess.run(cmdLine)
 
     # find latest XML report file for parsing
@@ -141,13 +146,13 @@ for testcase in root.findall("testcase"):
         stats = test.find('stats')
         test_status = stats.get("status")
         if test_status != "PASS":
-            errorText += print_return_error("status for Test " + str(test_id) + " is not PASS")
+            errorText += print_return_error("Status for Test " + str(test_id) + " is not PASS")
         passed_steps = int(stats.get("pass"))
         if passed_steps != len(dbrows[test_id - 1]):
-            errorText += print_return_error("not all steps passed for Test " + str(test_id))
+            errorText += print_return_error("Not all steps passed for Test " + str(test_id))
         if test_id != int(dbrows[test_id - 1][0][0]):
             errorText += print_return_error(
-                "mismatch between Test id from DB and from XML:" + dbrows[test_id - 1][0][0] + " <> " + test_id)
+                "Mismatch between Test id from DB and from XML:" + dbrows[test_id - 1][0][0] + " <> " + test_id)
 
 
         # go through steps
@@ -162,29 +167,41 @@ for testcase in root.findall("testcase"):
             if step_id != int(dbrows[test_id - 1][step_id - 1][1]):
                 errorCnt += 1
                 errorText += print_return_error(
-                    "mismatch between step id from DB and XML:" + dbrows[test_id - 1][step_id - 1][1] + "<>" + str(
+                    "Mismatch between step id from DB and XML:" + dbrows[test_id - 1][step_id - 1][1] + "<>" + str(
                         step_id))
             if node_type != dbrows[test_id - 1][step_id - 1][2]:
                 errorCnt += 1
-                errorText += print_return_error("mismatch between node types from DB and XML:" + node_type + "<>" +
+                errorText += print_return_error("Mismatch between node types from DB and XML:" + node_type + "<>" +
                                                 dbrows[test_id - 1][step_id - 1][2])
             if step_status != "PASS":
                 errorCnt += 1
-                errorText += print_return_error("status is not pass for step " + str(step_id))
+                errorText += print_return_error("Status is not pass for step " + str(step_id))
 
     # determine if pass or fail
     duration = int((datetime.now()-testStartTime).total_seconds())
     if errorCnt > 0:
         logLineData.append('<p style="color:red;font-weight:bold">FAIL</p>')
-        logLineData.append(str(duration) + " sec")
-        logLineData.append(errorText)
     else:
         logLineData.append('<p style="color:green;font-weight:bold">PASS</p>')
-        logLineData.append(str(duration) + " sec")
-        logLineData.append(str(testCnt) + " tests with " + str(stepCnt) + " steps in total passed")
+    logLineData.append(str(duration) + " sec")
+    logLineData.append(errorText + str(testCnt) + " tests with " + str(stepCnt) + " steps in total verified")
     logData.append(logLineData)
 
     # dump partial report file in case of failure
     auto_report = header + tabulate(logData, headers=col_names, tablefmt='unsafehtml') + "</body></html>"
     dump_log("c:\\test\\test_report.html", auto_report)
+
+# write final version
+globalEndTime=datetime.now()
+seconds = int((globalEndTime-globStartTime).total_seconds())
+hours = int(seconds // (60*60))
+minutes = int((seconds-(hours*60*60)) // 60)
+seconds = int(seconds-(hours*60*60)-(minutes*60))
+auto_report = header + tabulate(logData, headers=col_names, tablefmt='unsafehtml')
+auto_report += ('<br><h2 style="text-align:left">Test Execution End Time: ' +
+                globalEndTime.strftime("%b %d, %Y %H:%M:%S")+"<br>")
+auto_report += "Tests executed: " + str(testCaseCount) + "<br>"
+auto_report += ('Test Duration: ' + str(hours) + " hour(s) " + str(minutes) + " minute(s) " + str(seconds) +
+                " second(s)" + "<br></h2></body></html>")
+dump_log("c:\\test\\test_report.html", auto_report)
 
